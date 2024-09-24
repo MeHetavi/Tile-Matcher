@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tile Matcher</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&display=swap" rel="stylesheet">
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            background-color: #f0f0f0;
+            font-family: 'Bangers', Arial, sans-serif;
+        }
+
+        body * {
+            font-family: 'Bangers' !important;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            background-color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="game-container"></div>
+    <!-- Add this audio element for the match sound -->
+
+
+    <script>
+        class TileMatcherGame {
+            constructor() {
+                this.config = {
+                    type: Phaser.AUTO,
+                    scale: {
+                        mode: Phaser.Scale.RESIZE,
+                        parent: 'game-container',
+                        autoCenter: Phaser.Scale.CENTER_BOTH,
+                        width: window.innerWidth,
+                        height: window.innerHeight
+                    },
+                    scene: [BootScene, MainMenuScene, GameScene, EndScene],
+                    backgroundColor: '#f0f0f0'
+                };
+                this.game = new Phaser.Game(this.config);
+            }
+        }
+
+        class BootScene extends Phaser.Scene {
+            constructor() {
+                super('BootScene');
+            }
+
+            preload() {
+                this.load.image('background', 'assets/background.png');
+                this.load.image('red_tile', 'assets/red_tile.png');
+                this.load.image('blue_tile', 'assets/blue_tile.png');
+                this.load.image('green_tile', 'assets/green_tile.png');
+                this.load.image('yellow_tile', 'assets/yellow_tile.png');
+                this.load.image('purple_tile', 'assets/purple_tile.png');
+                this.load.image('particle', 'assets/particle.png'); // Load particle image
+            }
+
+            create() {
+                this.scene.start('MainMenuScene');
+            }
+        }
+
+        class MainMenuScene extends Phaser.Scene {
+            constructor() {
+                super('MainMenuScene');
+            }
+
+            create() {
+                this.add.image(this.cameras.main.width / 2, this.cameras.main.height / 2, 'background').setDisplaySize(this.cameras.main.width, this.cameras.main.height);
+
+                const titleSize = Math.floor(this.cameras.main.width * 0.06);
+                const textSize = Math.floor(this.cameras.main.width * 0.03);
+                const buttonSize = Math.floor(this.cameras.main.width * 0.04);
+
+                this.title = this.add.text(this.cameras.main.width / 2, this.cameras.main.height * 0.1, 'Tile Matcher', {
+                    fontSize: `${titleSize}px`,
+                    fill: '#000',
+                    fontFamily: 'Bangers'
+                }).setOrigin(0.5);
+
+                this.instructions = this.add.text(this.cameras.main.width / 2, this.cameras.main.height * 0.6, 'How to Play: Swap adjacent tiles to create\nmatches of 3 or more. Score points by making\nmatches before time runs out!', {
+                    fontSize: `${textSize}px`,
+                    fill: '#000',
+                    align: 'center',
+                    fontFamily: 'Bangers'
+                }).setOrigin(0.5);
+
+                this.startButton = this.add.text(this.cameras.main.width / 2, this.cameras.main.height * 0.8, 'Start Game', {
+                    fontSize: `${buttonSize}px`,
+                    fill: '#fff',
+                    backgroundColor: '#4CAF50',
+                    padding: { left: 15, right: 15, top: 10, bottom: 10 },
+                    fontFamily: 'Bangers'
+                }).setOrigin(0.5).setInteractive();
+
+                this.startButton.on('pointerdown', () => {
+                    this.scene.start('GameScene');
+                });
+            }
+
+            resize() {
+                const titleSize = Math.floor(this.cameras.main.width * 0.06);
+                const textSize = Math.floor(this.cameras.main.width * 0.03);
+                const buttonSize = Math.floor(this.cameras.main.width * 0.04);
+
+                this.title.setFontSize(titleSize);
+                this.instructions.setFontSize(textSize);
+                this.startButton.setFontSize(buttonSize);
+            }
+        }
+
+        class GameScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'GameScene' });
+                this.GRID_SIZE = 8;
+                this.TILE_TYPES = ['red', 'blue', 'green', 'yellow', 'purple'];
+                this.score = 0;
+                this.combo = 0;
+                this.gameTime = 60;
+                this.movesLeft = 20;
+                this.isPaused = false; // Track the pause state
+            }
+
+            create() {
+                this.add.image(this.cameras.main.width / 2, this.cameras.main.height / 2, 'background').setDisplaySize(this.cameras.main.width, this.cameras.main.height);
+                this.calculateTileSize();
+                this.grid = this.createInitialGrid(); // Call the method to create the initial grid
+                this.selectedTile = null;
+                this.canMove = true;
+
+                this.input.on('gameobjectdown', this.onTileClicked, this);
+
+                const padding = 20; // Padding for the box
+                const fontSize = Math.floor(this.cameras.main.height * 0.15 * 0.3);
+
+                this.scoreText = this.add.text(10, 10, 'Score: 0', { fontSize: `${fontSize}px`, fill: '#fff', fontFamily: 'Bangers' });
+                this.timeText = this.add.text(10, 50, 'Time: 60', { fontSize: `${fontSize}px`, fill: '#fff', fontFamily: 'Bangers' });
+                this.movesText = this.add.text(10, 90, `Moves: ${this.movesLeft}`, { fontSize: `${fontSize}px`, fill: '#fff', fontFamily: 'Bangers' }); // Initialize movesText
+
+                const scoreTextWidth = this.scoreText.width + padding;
+                const timeTextWidth = this.timeText.width + padding;
+                const movesTextWidth = this.movesText.width + padding;
+
+                this.particles = this.add.particles('particle'); // Load your particle image or texture
+                this.emitter = this.particles.createEmitter({
+                    speed: { min: 100, max: 200 },
+                    scale: { start: 1, end: 0 },
+                    alpha: { start: 1, end: 0 },
+                    lifespan: 500,
+                    gravityY: 0,
+                    quantity: 10,
+                    blendMode: 'ADD',
+                });
+
+                this.timer = this.time.addEvent({
+                    delay: 1000,
+                    callback: this.updateTimer,
+                    callbackScope: this,
+                    loop: true
+                });
+            }
+
+            createInitialGrid() {
+                const grid = [];
+                for (let y = 0; y < this.GRID_SIZE; y++) {
+                    grid[y] = [];
+                    for (let x = 0; x < this.GRID_SIZE; x++) {
+                        const tileType = Phaser.Math.RND.pick(this.TILE_TYPES); // Randomly select a tile type
+                        const tile = this.add.image(
+                            (this.cameras.main.width - this.GRID_SIZE * this.TILE_SIZE) / 2 + x * this.TILE_SIZE,
+                            (this.cameras.main.height - this.GRID_SIZE * this.TILE_SIZE) / 2 + y * this.TILE_SIZE,
+                            `${tileType}_tile`
+                        ).setOrigin(0, 0).setInteractive().setDisplaySize(this.TILE_SIZE, this.TILE_SIZE);
+
+                        tile.tileType = tileType;
+                        tile.gridX = x;
+                        tile.gridY = y;
+                        grid[y][x] = tile; // Add the tile to the grid
+                    }
+                }
+                return grid; // Return the initialized grid
+            }
+
+            togglePause() {
+                this.isPaused = !this.isPaused;
+                if (this.isPaused) {
+                    this.pauseButton.setText('Resume');
+                    this.scene.pause();
+                } else {
+                    this.pauseButton.setText('Pause');
+                    this.scene.resume();
+                }
+            }
+
+            calculateTileSize() {
+                const availableWidth = this.cameras.main.width * 0.9;
+                const availableHeight = this.cameras.main.height * 0.8;
+                this.TILE_SIZE = Math.floor(Math.min(availableWidth, availableHeight) / this.GRID_SIZE);
+            }
+
+            onTileClicked(pointer, tile) {
+                if (!this.canMove || this.movesLeft <= 0) return;
+
+                if (!this.selectedTile) {
+                    this.selectedTile = tile;
+                    tile.setTint(0xffff00);
+                } else {
+                    if (this.areAdjacent(this.selectedTile, tile)) {
+                        if (this.checkIfSwapCreatesMatch(this.selectedTile, tile)) {
+                            this.swapTiles(this.selectedTile, tile);
+                            this.movesLeft--;
+                            this.movesText.setText(`Moves: ${this.movesLeft}`);
+                        } else {
+                            this.selectedTile.clearTint();
+                            this.selectedTile = null;
+                        }
+                    } else {
+                        this.selectedTile.clearTint();
+                        this.selectedTile = tile;
+                        tile.setTint(0xffff00);
+                    }
+                }
+            }
+
+            checkIfSwapCreatesMatch(tile1, tile2) {
+                const tempGrid = this.grid.map(row => [...row]);
+                [tempGrid[tile1.gridY][tile1.gridX], tempGrid[tile2.gridY][tile2.gridX]] = [tempGrid[tile2.gridY][tile2.gridX], tempGrid[tile1.gridY][tile1.gridX]];
+
+                const matches = this.findMatchesInGrid(tempGrid);
+                return matches.length > 0;
+            }
+
+            findMatchesInGrid(grid) {
+                const matches = [];
+
+                for (let y = 0; y < this.GRID_SIZE; y++) {
+                    let matchCount = 1;
+                    for (let x = 1; x < this.GRID_SIZE; x++) {
+                        if (grid[y][x] && grid[y][x - 1] && grid[y][x].tileType === grid[y][x - 1].tileType) {
+                            matchCount++;
+                        } else {
+                            if (matchCount >= 3) {
+                                for (let i = 0; i < matchCount; i++) {
+                                    matches.push(grid[y][x - 1 - i]);
+                                }
+                            }
+                            matchCount = 1;
+                        }
+                    }
+                    if (matchCount >= 3) {
+                        for (let i = 0; i < matchCount; i++) {
+                            matches.push(grid[y][this.GRID_SIZE - 1 - i]);
+                        }
+                    }
+                }
+
+                for (let x = 0; x < this.GRID_SIZE; x++) {
+                    let matchCount = 1;
+                    for (let y = 1; y < this.GRID_SIZE; y++) {
+                        if (grid[y][x] && grid[y - 1][x] && grid[y][x].tileType === grid[y - 1][x].tileType) {
+                            matchCount++;
+                        } else {
+                            if (matchCount >= 3) {
+                                for (let i = 0; i < matchCount; i++) {
+                                    matches.push(grid[y - 1 - i][x]);
+                                }
+                            }
+                            matchCount = 1;
+                        }
+                    }
+                    if (matchCount >= 3) {
+                        for (let i = 0; i < matchCount; i++) {
+                            matches.push(grid[this.GRID_SIZE - 1 - i][x]);
+                        }
+                    }
+                }
+
+                return matches;
+            }
+
+            areAdjacent(tile1, tile2) {
+                const dx = Math.abs(tile1.gridX - tile2.gridX);
+                const dy = Math.abs(tile1.gridY - tile2.gridY);
+                return (dx === 1 && dy === 0) || (dx === 0 && dy === 1);
+            }
+
+            swapTiles(tile1, tile2) {
+                this.canMove = false;
+                const tempX = tile1.x;
+                const tempY = tile1.y;
+                const tempGridX = tile1.gridX;
+                const tempGridY = tile1.gridY;
+
+                this.tweens.add({
+                    targets: tile1,
+                    x: tile2.x,
+                    y: tile2.y,
+                    duration: 200
+                });
+
+                this.tweens.add({
+                    targets: tile2,
+                    x: tempX,
+                    y: tempY,
+                    duration: 200,
+                    onComplete: () => {
+                        this.grid[tile2.gridY][tile2.gridX] = tile1;
+                        this.grid[tempGridY][tempGridX] = tile2;
+
+                        [tile1.gridX, tile1.gridY, tile2.gridX, tile2.gridY] = [tile2.gridX, tile2.gridY, tempGridX, tempGridY];
+
+                        tile1.clearTint();
+                        tile2.clearTint();
+                        this.selectedTile = null;
+
+                        this.checkMatches();
+                    }
+                });
+            }
+
+            checkMatches() {
+                const matches = this.findMatchesInGrid(this.grid);
+                if (matches.length > 0) {
+                    this.removeMatches(matches);
+                    this.combo++;
+                    this.updateScore(matches);
+                    this.dropTiles();
+                    this.time.delayedCall(500, this.fillEmptySpaces, [], this);
+                } else {
+                    this.combo = 0;
+                    this.canMove = true;
+                    this.checkGameOver();
+                }
+            }
+
+            removeMatches(matches) {
+
+                matches.forEach(tile => {
+                    // Emit particles at the tile's position
+                    this.emitter.setPosition(tile.x, tile.y);
+                    this.emitter.explode(5); // Emit particles
+                    this.emitter.setScale(0.1);
+                    // Create a blast effect by scaling and rotating
+                    this.tweens.add({
+                        targets: tile,
+                        scale: 0, // Scale down to 0 for a blast effect
+                        duration: 300, // Duration of the animation
+                        ease: 'Power2', // Easing function for smooth animation
+                        onComplete: () => {
+                            tile.setAlpha(0); // Ensure the tile is fully transparent
+                            this.grid[tile.gridY][tile.gridX] = null; // Remove from grid
+                        }
+                    });
+                });
+
+                // Call dropTiles after removing matches to fill the gaps
+                this.dropTiles(); // Ensure tiles drop to fill the empty spaces
+                this.playMatchSound(); // Play the match sound
+            }
+
+            updateScore(matches) {
+                const basePoints = matches.length * 100;
+                const comboMultiplier = Math.min(1 + this.combo * 0.1, 2);
+                this.score += Math.floor(basePoints * comboMultiplier);
+                this.scoreText.setText(`Score: ${this.score}`);
+            }
+
+            playMatchSound() {
+                const matchSound = new Audio("./match_made.mp3");
+                matchSound.play();
+            }
+
+            dropTiles() {
+                let hasMoved = true; // Flag to check if any tiles have moved
+
+                while (hasMoved) {
+                    hasMoved = false; // Reset the flag for this iteration
+
+                    for (let x = 0; x < this.GRID_SIZE; x++) {
+                        for (let y = this.GRID_SIZE - 1; y >= 0; y--) { // Loop from bottom to top
+                            if (this.grid[y][x] === null) {
+                                for (let k = y - 1; k >= 0; k--) { // Find the first non-null tile above
+                                    if (this.grid[k][x] !== null) {
+                                        const tile = this.grid[k][x];
+                                        // Check if the target position is empty before moving
+                                        if (this.grid[y][x] === null) {
+                                            this.grid[y][x] = tile; // Move tile down to the empty space
+                                            this.grid[k][x] = null; // Set the original position to null
+                                            tile.gridY += 1; // Update grid position
+                                            this.tweens.add({
+                                                targets: tile,
+                                                y: tile.y + this.TILE_SIZE, // Move down
+                                                duration: 200
+                                            });
+                                            hasMoved = true; // Set the flag to true since a tile has moved
+                                            break; // Exit the loop after moving a tile
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // After dropping tiles, fill the topmost empty spaces
+                this.fillEmptySpaces();
+            }
+
+            fillEmptySpaces() {
+                let filledTiles = false;
+
+                // Fill the empty spaces by bringing tiles down from above
+                for (let x = 0; x < this.GRID_SIZE; x++) {
+                    for (let y = this.GRID_SIZE - 1; y >= 0; y--) { // Loop from bottom to top
+                        if (this.grid[y][x] === null) { // Check if the current position is empty
+                            filledTiles = true;
+                            // Move the first tile found above down to fill the empty space
+                            for (let k = y - 1; k >= 0; k--) { // Check tiles above
+                                if (this.grid[k][x] !== null) { // Find the first non-null tile above
+                                    const tile = this.grid[k][x];
+                                    this.grid[y][x] = tile; // Move tile down to the empty space
+                                    this.grid[k][x] = null; // Set the original position to null
+                                    tile.gridY = y; // Update grid position
+                                    this.tweens.add({
+                                        targets: tile,
+                                        y: (this.cameras.main.height - this.GRID_SIZE * this.TILE_SIZE) / 2 + y * this.TILE_SIZE, // Move to its position
+                                        duration: 200
+                                    });
+                                    break; // Exit the loop after moving a tile
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // After filling spaces below, fill any remaining empty spaces at the top with new tiles
+                for (let x = 0; x < this.GRID_SIZE; x++) {
+                    for (let y = 0; y < this.GRID_SIZE; y++) { // Loop from top to bottom
+                        if (this.grid[y][x] === null) { // Check if the current position is empty
+                            const tileType = Phaser.Math.RND.pick(this.TILE_TYPES); // Randomly select a tile type
+                            const newTile = this.add.image(
+                                (this.cameras.main.width - this.GRID_SIZE * this.TILE_SIZE) / 2 + x * this.TILE_SIZE,
+                                -this.TILE_SIZE, // Start above the grid
+                                `${tileType}_tile`
+                            ).setOrigin(0, 0).setInteractive().setDisplaySize(this.TILE_SIZE, this.TILE_SIZE);
+
+                            newTile.tileType = tileType;
+                            newTile.gridX = x;
+                            newTile.gridY = y;
+                            this.grid[y][x] = newTile; // Add the new tile to the grid
+
+                            // Animate the new tile falling into position
+                            this.tweens.add({
+                                targets: newTile,
+                                y: (this.cameras.main.height - this.GRID_SIZE * this.TILE_SIZE) / 2 + y * this.TILE_SIZE, // Move to its position
+                                duration: 300,
+                                ease: 'Bounce' // Add a bounce effect for a nice animation
+                            });
+                        }
+                    }
+                }
+
+                if (filledTiles) {
+                    this.time.delayedCall(250, this.checkMatches, [], this); // Check for new matches after filling
+                } else {
+                    this.canMove = true; // Allow player to move again
+                    this.checkGameOver(); // Check if the game is over
+                }
+            }
+
+            checkGameOver() {
+                if (this.gameTime <= 0 || this.movesLeft <= 0) {
+                    this.timer.remove();
+                    this.scene.start('EndScene', { score: this.score });
+                }
+            }
+
+            updateTimer() {
+                if (!this.isPaused) { // Only update the timer if the game is not paused
+                    this.gameTime--;
+                    this.timeText.setText(`Time: ${this.gameTime}`);
+                    this.checkGameOver();
+                }
+            }
+
+            resize() {
+                this.calculateTileSize();
+                this.grid.forEach(row => {
+                    row.forEach(tile => {
+                        tile.setDisplaySize(this.TILE_SIZE, this.TILE_SIZE);
+                        tile.setPosition(
+                            (this.cameras.main.width - this.GRID_SIZE * this.TILE_SIZE) / 2 + tile.gridX * this.TILE_SIZE,
+                            (this.cameras.main.height - this.GRID_SIZE * this.TILE_SIZE) / 2 + tile.gridY * this.TILE_SIZE
+                        );
+                    });
+                });
+
+                const padding = 20; // Padding for the box
+                const fontSize = Math.floor(this.cameras.main.height * 0.15 * 0.3);
+
+                // Calculate the width based on the text content
+                const scoreTextWidth = this.scoreText.width + padding;
+                const timeTextWidth = this.timeText.width + padding;
+                const movesTextWidth = this.movesText.width + padding;
+                const boxWidth = Math.max(scoreTextWidth, timeTextWidth, movesTextWidth); // Use the larger width
+
+                const boxHeight = this.cameras.main.height * 0.15; // Responsive height
+
+                this.scoreText.setFontSize(fontSize);
+                this.timeText.setFontSize(fontSize);
+                this.movesText.setFontSize(fontSize);
+                this.infoBox.setSize(boxWidth, boxHeight); // Adjust the size of the info box
+            }
+
+            pauseGame() {
+                this.isPaused = true;
+                this.scene.pause(); // Pause the scene
+                // Additional pause logic (e.g., show pause menu)
+            }
+
+            resumeGame() {
+                if (this.isPaused) {
+                    this.isPaused = false;
+                    this.scene.resume(); // Resume the scene
+                    // Additional resume logic (e.g., hide pause menu)
+                }
+            }
+        }
+
+        class EndScene extends Phaser.Scene {
+            constructor() {
+                super('EndScene');
+            }
+
+            init(data) {
+                this.score = data.score;
+            }
+
+            create() {
+                this.add.image(this.cameras.main.width / 2, this.cameras.main.height / 2, 'background').setDisplaySize(this.cameras.main.width, this.cameras.main.height);
+
+                const titleSize = Math.floor(this.cameras.main.width * 0.06);
+                const textSize = Math.floor(this.cameras.main.width * 0.04);
+                const buttonSize = Math.floor(this.cameras.main.width * 0.04);
+
+                this.gameOverText = this.add.text(this.cameras.main.width / 2, this.cameras.main.height * 0.3, 'Game Over!', {
+                    fontSize: `${titleSize}px`,
+                    fill: '#000',
+                    fontFamily: 'Bangers'
+                }).setOrigin(0.5);
+
+                this.finalScoreText = this.add.text(this.cameras.main.width / 2, this.cameras.main.height * 0.5, `Final Score: ${this.score}`, {
+                    fontSize: `${textSize}px`,
+                    fill: '#000',
+                    fontFamily: 'Bangers'
+                }).setOrigin(0.5);
+
+                this.playAgainButton = this.add.text(this.cameras.main.width / 2, this.cameras.main.height * 0.7, 'Play Again', {
+                    fontSize: `${buttonSize}px`,
+                    fill: '#fff',
+                    backgroundColor: '#4CAF50',
+                    padding: { left: 15, right: 15, top: 10, bottom: 10 },
+                    fontFamily: 'Bangers'
+                }).setOrigin(0.5).setInteractive();
+
+                this.playAgainButton.on('pointerdown', () => {
+                    this.scene.start('GameScene');
+                });
+            }
+
+            resize() {
+                const titleSize = Math.floor(this.cameras.main.width * 0.06);
+                const textSize = Math.floor(this.cameras.main.width * 0.04);
+                const buttonSize = Math.floor(this.cameras.main.width * 0.04);
+
+                this.gameOverText.setFontSize(titleSize);
+                this.finalScoreText.setFontSize(textSize);
+                this.playAgainButton.setFontSize(buttonSize);
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            const game = Phaser.GAMES[0];
+            const scenes = game.scene.scenes;
+            scenes.forEach(scene => {
+                if (scene.resize) {
+                    scene.resize();
+                }
+            });
+        });
+
+        const bd_music = new Audio("./bg_music.mp3");
+        bd_music.loop = true;
+        bd_music.play();
+        const game = new TileMatcherGame();
+
+    </script>
+</body>
+
+</html>
