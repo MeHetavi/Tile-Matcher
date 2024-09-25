@@ -35,8 +35,10 @@
 
 <body>
     <div id="game-container"></div>
-    <!-- Add this audio element for the match sound -->
-
+    <!-- Add this audio element for the background music -->
+    <audio id="bgMusic" loop>
+        <source src="./bg_music.mp3" type="audio/mpeg">
+    </audio>
 
     <script>
         class TileMatcherGame {
@@ -63,13 +65,13 @@
             }
 
             preload() {
-                this.load.image('background', 'Assets/background.png');
-                this.load.image('red_tile', 'Assets/red_tile.png');
-                this.load.image('blue_tile', 'Assets/blue_tile.png');
-                this.load.image('green_tile', 'Assets/green_tile.png');
-                this.load.image('yellow_tile', 'Assets/yellow_tile.png');
-                this.load.image('purple_tile', 'Assets/purple_tile.png');
-                this.load.image('particle', 'Assets/particle.png'); // Load particle image
+                this.load.image('background', 'assets/background.png');
+                this.load.image('red_tile', 'assets/red_tile.png');
+                this.load.image('blue_tile', 'assets/blue_tile.png');
+                this.load.image('green_tile', 'assets/green_tile.png');
+                this.load.image('yellow_tile', 'assets/yellow_tile.png');
+                this.load.image('purple_tile', 'assets/purple_tile.png');
+                this.load.image('particle', 'assets/particle.png'); // Load particle image
             }
 
             create() {
@@ -80,6 +82,7 @@
         class MainMenuScene extends Phaser.Scene {
             constructor() {
                 super('MainMenuScene');
+                this.isMuted = true;
             }
 
             create() {
@@ -113,6 +116,24 @@
                 this.startButton.on('pointerdown', () => {
                     this.scene.start('GameScene');
                 });
+
+                // Add mute/unmute button
+                this.muteButton = this.add.text(this.cameras.main.width - 20, 20, '🔇', {
+                    fontSize: `${buttonSize}px`,
+                    fill: '#000',
+                    fontFamily: 'Arial'
+                }).setOrigin(1, 0).setInteractive();
+
+                this.muteButton.on('pointerdown', () => {
+                    this.isMuted = !this.isMuted;
+                    if (this.isMuted) {
+                        this.muteButton.setText('🔇');
+                        document.getElementById('bgMusic').pause();
+                    } else {
+                        this.muteButton.setText('🔊');
+                        document.getElementById('bgMusic').play().catch(e => console.log("Audio play failed:", e));
+                    }
+                });
             }
 
             resize() {
@@ -123,6 +144,7 @@
                 this.title.setFontSize(titleSize);
                 this.instructions.setFontSize(textSize);
                 this.startButton.setFontSize(buttonSize);
+                this.muteButton.setFontSize(buttonSize);
             }
         }
 
@@ -133,9 +155,10 @@
                 this.TILE_TYPES = ['red', 'blue', 'green', 'yellow', 'purple'];
                 this.score = 0;
                 this.combo = 0;
-                this.gameTime = 60;
+                this.gameTime = 2;
                 this.movesLeft = 20;
                 this.isPaused = false; // Track the pause state
+                this.isMuted = true; // Initialize muted state
             }
 
             create() {
@@ -174,6 +197,24 @@
                     callback: this.updateTimer,
                     callbackScope: this,
                     loop: true
+                });
+
+                // Add mute/unmute button
+                this.muteButton = this.add.text(this.cameras.main.width - 20, 20, '🔇', {
+                    fontSize: `${fontSize}px`,
+                    fill: '#000',
+                    fontFamily: 'Arial'
+                }).setOrigin(1, 0).setInteractive();
+
+                this.muteButton.on('pointerdown', () => {
+                    this.isMuted = !this.isMuted;
+                    if (this.isMuted) {
+                        this.muteButton.setText('🔇');
+                        document.getElementById('bgMusic').pause();
+                    } else {
+                        this.muteButton.setText('🔊');
+                        document.getElementById('bgMusic').play().catch(e => console.log("Audio play failed:", e));
+                    }
                 });
             }
 
@@ -526,7 +567,8 @@
                 this.scoreText.setFontSize(fontSize);
                 this.timeText.setFontSize(fontSize);
                 this.movesText.setFontSize(fontSize);
-                this.infoBox.setSize(boxWidth, boxHeight); // Adjust the size of the info box
+                this.muteButton.setFontSize(fontSize);
+                this.muteButton.setPosition(this.cameras.main.width - 20, 20);
             }
 
             pauseGame() {
@@ -558,7 +600,6 @@
 
                 const titleSize = Math.floor(this.cameras.main.width * 0.06);
                 const textSize = Math.floor(this.cameras.main.width * 0.04);
-                const buttonSize = Math.floor(this.cameras.main.width * 0.04);
 
                 this.gameOverText = this.add.text(this.cameras.main.width / 2, this.cameras.main.height * 0.3, 'Game Over!', {
                     fontSize: `${titleSize}px`,
@@ -572,27 +613,18 @@
                     fontFamily: 'Bangers'
                 }).setOrigin(0.5);
 
-                this.playAgainButton = this.add.text(this.cameras.main.width / 2, this.cameras.main.height * 0.7, 'Play Again', {
-                    fontSize: `${buttonSize}px`,
-                    fill: '#fff',
-                    backgroundColor: '#4CAF50',
-                    padding: { left: 15, right: 15, top: 10, bottom: 10 },
-                    fontFamily: 'Bangers'
-                }).setOrigin(0.5).setInteractive();
-
-                this.playAgainButton.on('pointerdown', () => {
-                    this.scene.start('GameScene');
-                });
+                // Set a timer to automatically return to the main menu after 3 seconds
+                this.time.delayedCall(3000, () => {
+                    this.scene.start('MainMenuScene');
+                }, [], this);
             }
 
             resize() {
                 const titleSize = Math.floor(this.cameras.main.width * 0.06);
                 const textSize = Math.floor(this.cameras.main.width * 0.04);
-                const buttonSize = Math.floor(this.cameras.main.width * 0.04);
 
                 this.gameOverText.setFontSize(titleSize);
                 this.finalScoreText.setFontSize(textSize);
-                this.playAgainButton.setFontSize(buttonSize);
             }
         }
 
@@ -606,9 +638,6 @@
             });
         });
 
-        const bg_music = new Audio("./bg_music.mp3");
-        bg_music.loop = true;
-        bg_music.play();
         const game = new TileMatcherGame();
 
     </script>
